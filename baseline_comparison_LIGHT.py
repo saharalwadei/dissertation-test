@@ -71,15 +71,14 @@ warnings.filterwarnings('ignore')
 # ============================================================================
 
 LIGHT_CONFIG = {
-    #'functions':    ['sphere', 'sine_composite', 'rastrigin'],  # 3 of 7
-    'functions':    ['sine_composite'],  # 3 of 7
+    'functions':    ['sphere', 'sine_composite', 'rastrigin'],  # 3 of 7
     'dimensions':   [2, 5],                                      # skip 10D
     'n_samples':    500,                                         # vs 1000
     'n_runs':       2,                                           # vs 3
     'ga_pop':       80,                                          # vs 200
     'ga_gens':      150,                                         # vs 500
     'torch_epochs': 200,                                         # vs 500
-    'ga_versions':  ['v1', 'v2'],                                # add versions as you fix bugs
+    'ga_versions':  ['v1', 'v2'],                                      # add versions as you fix bugs
 }
 
 
@@ -386,7 +385,7 @@ GA_CONFIGS = {
 
 
 def run_ga_experiment(X_train, y_train, X_test, y_test,
-                      num_functions=6, sol_per_pop=80,
+                      num_functions=4, sol_per_pop=80,
                       num_generations=150, ga_config_name='v0'):
     if not PYGAD_AVAILABLE:
         return {'MSE': float('nan'), 'MAE': float('nan'), 'R2': float('nan'),
@@ -615,7 +614,7 @@ def run_comparison(config=None):
                 for run in range(config['n_runs']):
                     res = run_ga_experiment(
                         Xtr, ytr, Xte, yte,
-                        num_functions  = 6,
+                        num_functions  = 4,
                         sol_per_pop    = config['ga_pop'],
                         num_generations= config['ga_gens'],
                         ga_config_name = gv,
