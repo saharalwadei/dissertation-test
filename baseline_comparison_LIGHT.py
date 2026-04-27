@@ -344,11 +344,11 @@ GA_CONFIGS = {
     
     'v1': {
         'description': 'All structural fixes: A1+A2+A3+B1+B2+B4+B3/B5. Coefficient range (-1,1).',
-        'weight_range':     (-10, 10),  # FIXED B2: periodic functions need this
-        'function_range':   (2, 5),     # FIXED A1: pow=4 now reachable
+        'weight_range':     (-10, 10),  # FIXED B2: periodic functions need this 
+        'function_range':   (2, 5),     # FIXED A1: pow=4 now reachable 
         'operation_range':  (0, 2),     # FIXED A2: multiply=1 now reachable
         'coefficient_range':(-1, 1),    # keep coefficients small to avoid fitness explosion (BUG 6)
-        'version':          'v1',       # FIXED B1: np.radians removed
+        'version':          'v1',       # FIXED B1: np.radians removed 
     },
     # --- ADD NEW VERSIONS BELOW AS YOU FIX BUGS ---
     # 'v1': {
