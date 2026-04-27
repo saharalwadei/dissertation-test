@@ -181,8 +181,11 @@ def parse_solution_one_output(solution, num_inputs, num_functions):
             'weights':     weights[i * num_inputs:(i + 1) * num_inputs],
         })
 
-    return parsed_solution, operations
+    # BIAS: last gene in chromosome
+    bias_start = coefficients_start + num_functions
+    bias = float(solution[bias_start])
 
+    return parsed_solution, operations, bias
 
 def apply_operations_one_output(terms, operations):
     """Apply +/* operations between terms. Original code, unchanged."""
@@ -215,7 +218,8 @@ def activation_function_one_output(inputs, solution, num_inputs, num_functions, 
     version='v2' : fractional exponents, elementwise integer/fractional handling
     """
     inputs  = np.array(inputs, dtype=float)   # shape: (n_samples, n_inputs)
-    parsed_solution, operations = parse_solution_one_output(
+
+    parsed_solution, operations, bias = parse_solution_one_output(
         solution, num_inputs, num_functions
     )
 
@@ -268,14 +272,18 @@ def activation_function_one_output(inputs, solution, num_inputs, num_functions, 
     # apply_operations_one_output works unchanged — *= and sum() both
     # operate elementwise on numpy arrays automatically
     result = apply_operations_one_output(terms, operations)
-    return np.array(result).tolist()
+
+    # add bias to every prediction
+    return (np.array(result) + bias).tolist()
 
 
 def solution_to_string(solution, num_inputs, num_functions):
     """Convert chromosome to readable math expression."""
-    parsed_solution, operations = parse_solution_one_output(
+    
+    parsed_solution, operations, bias = parse_solution_one_output(
         solution, num_inputs, num_functions
     )
+
     terms = []
     for func in parsed_solution:
         ft, c, w = func['function'], func['coefficient'], func['weights']
@@ -295,33 +303,34 @@ def solution_to_string(solution, num_inputs, num_functions):
         else:
             raise ValueError(f"Unsupported function type: {ft}")    
 
-
     expression = terms[0] if terms else "0"
     for term, op in zip(terms[1:], operations):
         expression += (" + " if op == 0 else " * ") + term
+    expression += f" + {bias:.3f}"   # BIAS: always shown as final additive term
     return expression
-
 
 def identify_gene_types(num_weights, num_functions, num_operations, num_coefficients):
     return (
         [[float, 2]] * num_weights      +
         [int]        * num_functions    +
         [int]        * num_operations   +
-        [[float, 2]] * num_coefficients
+        [[float, 2]] * num_coefficients +
+        [[float, 2]] * 1                # BIAS: one constant offset gene
     )
 
 
 def identify_gene_ranges(num_weights, weight_range,
                           num_functions, function_range,
                           num_operations, operation_range,
-                          num_coefficients, coefficient_range):
+                          num_coefficients, coefficient_range,
+                          bias_range):
     return (
-        [{'low': weight_range[0],      'high': weight_range[1]}]      * num_weights      +
+        [{'low': weight_range[0],      'high': weight_range[1]}]       * num_weights      +
         [{'low': function_range[0],    'high': function_range[1]}]     * num_functions    +
         [{'low': operation_range[0],   'high': operation_range[1]}]    * num_operations   +
-        [{'low': coefficient_range[0], 'high': coefficient_range[1]}]  * num_coefficients
+        [{'low': coefficient_range[0], 'high': coefficient_range[1]}]  * num_coefficients +
+        [{'low': bias_range[0],        'high': bias_range[1]}]         * 1                   # BIAS
     )
-
 
 def set_elite_parents(population_size, elite_ratio=0.1, parents_ratio=0.5):
     elite   = round(population_size * elite_ratio)
@@ -359,6 +368,7 @@ GA_CONFIGS = {
         'operation_range':  (0, 2),     # FIXED A2: multiply=1 now reachable
         'coefficient_range':(-1, 1),    # keep coefficients small to avoid fitness explosion (BUG 6)
         'version':          'v1',       # FIXED B1: np.radians removed 
+        'bias_range': (-1, 1),
     },
 
     'v2': {
@@ -368,16 +378,9 @@ GA_CONFIGS = {
     'operation_range':  (0, 2),
     'coefficient_range':(-1, 1),
     'version': 'v2',                    # activates fractional exponents in pow branch
+    'bias_range': (-1, 1),
 },
-    # --- ADD NEW VERSIONS BELOW AS YOU FIX BUGS ---
-    # 'v1': {
-    #     'description':      'v0 + fix BUG 1,2,3: correct ranges + remove allow_duplicate_genes',
-    #     'weight_range':     (-1, 1),
-    #     'function_range':   (2, 5),   # FIXED: pow=4 now reachable
-    #     'operation_range':  (0, 2),   # FIXED: multiply=1 now reachable
-    #     'coefficient_range':(-1, 1),
-    #     'version':          'v0',     # np.radians still present
-    # },
+
 }
 
 
@@ -418,8 +421,11 @@ def run_ga_experiment(X_train, y_train, X_test, y_test,
         num_functions, config['function_range'],
         num_ops,       config['operation_range'],
         num_coeffs,    config['coefficient_range'],
+        config['bias_range'], 
     )
-    chrom_len = num_weights + num_functions + num_ops + num_coeffs
+
+    chrom_len = num_weights + num_functions + num_ops + num_coeffs + 1  # +1 for bias
+   
     keep_elitism, num_parents_mating = set_elite_parents(sol_per_pop)
 
     start = time.time()
