@@ -207,87 +207,68 @@ def apply_operations_one_output(terms, operations):
     result_terms.append(current_product)
     return sum(result_terms)
 
-
-def activation_function_one_output(inputs, solution, num_inputs, num_functions,
-                                    version='v0'):
+def activation_function_one_output(inputs, solution, num_inputs, num_functions, version='v0'):
     """
-    Compute model output for all input rows.
+    Compute model output for all input rows simultaneously (vectorized).
     version='v0' : original code with np.radians (BUG 4)
-    version='v1' : np.radians removed
+    version='v1' : np.radians removed, integer exponents {1,2,3,4}
+    version='v2' : fractional exponents, elementwise integer/fractional handling
     """
+    inputs  = np.array(inputs, dtype=float)   # shape: (n_samples, n_inputs)
     parsed_solution, operations = parse_solution_one_output(
         solution, num_inputs, num_functions
     )
-    activation_values = []
 
-    for input_record in inputs:
-        input_record = np.array(input_record, dtype=float)
-        terms = []
+    terms = []  # each entry will be shape (n_samples,)
 
-        for func in parsed_solution:
-            ft          = func['function']
-            coefficient = func['coefficient']
-            weights     = np.array(func['weights'], dtype=float)
+    for func in parsed_solution:
+        ft          = func['function']
+        coefficient = func['coefficient']
+        weights     = np.array(func['weights'], dtype=float)  # shape: (n_inputs,)
 
-            if ft == 'sin':
-                if version == 'v0':
-                    # BUG 4: np.radians compresses the dot product by factor ~0.0175
-                    term = coefficient * np.sin(np.radians(np.dot(weights, input_record)))
-                else:
-                    term = coefficient * np.sin(np.dot(weights, input_record))
-
-            elif ft == 'cos':
-                if version == 'v0':
-                    term = coefficient * np.cos(np.radians(np.dot(weights, input_record)))
-                else:
-                    term = coefficient * np.cos(np.dot(weights, input_record))
-              
-            elif ft == 'pow':
-                if version == 'v2':
-                    # v2 fixes BUG 7 by handling integer and fractional exponents separately (fractional exponents — elementwise per dimension)
-                    exponents = np.abs(weights)
-                    
-                    # For each dimension, choose the base depending on whether
-                    # the exponent is integer or fractional:
-                    #   Integer exponent: use raw x — np.power handles sign correctly
-                    #                     so (-5)^2 = 25 and (-5)^3 = -125 as expected
-                    #   Fractional exponent: use |x|+eps — avoids complex numbers
-                    #                        since (-0.5)^0.7 is undefined in real numbers
-                    # np.where operates elementwise so each dimension is handled
-                    # independently — e.g. exponents [2.0, 0.7, 3.0] correctly uses
-                    # raw x for dims 1 and 3, and |x| only for dim 2
-                    is_integer = np.floor(exponents) == exponents
-                    base = np.where(is_integer, input_record, np.abs(input_record) + 1e-10)
-                    term = coefficient * np.sum(np.power(base, exponents))
-                    
-                    # Equivalent explicit loop (clearer but slower — kept for reference):
-                    # result = np.zeros_like(input_record, dtype=float)
-                    # for j, (x, e) in enumerate(zip(input_record, exponents)):
-                    #     if e == np.floor(e):        # integer exponent
-                    #         result[j] = np.power(x, e)                  # (-5)^2 = 25 correctly
-                    #     else:                        # fractional exponent
-                    #         result[j] = np.power(np.abs(x) + 1e-10, e) # always real
-                    # term = coefficient * np.sum(result)
-                elif version == 'v0':
-                    # BUG 7: using raw input_record for all exponents causes issues
-                    # when weights are negative (fractional exponents become complex)
-                    term = coefficient * np.sum(np.power(input_record, np.abs(weights)))
-                elif version == 'v1':
-                    # v1: integer exponents only, clipped to {1,2,3,4}
-                    exponents = np.clip(np.round(np.abs(weights)), 1, 4).astype(int)
-                    term = coefficient * np.sum(np.power(input_record, exponents))
-
-            elif ft == 'none':
-                term = 0.0
-                
+        if ft == 'sin':
+            # inputs @ weights: (n_samples, n_inputs) @ (n_inputs,) = (n_samples,)
+            if version == 'v0':
+                term = coefficient * np.sin(np.radians(inputs @ weights))
             else:
-                raise ValueError(f"Unsupported function type: {ft}")
+                term = coefficient * np.sin(inputs @ weights)
 
-            terms.append(term)
+        elif ft == 'cos':
+            if version == 'v0':
+                term = coefficient * np.cos(np.radians(inputs @ weights))
+            else:
+                term = coefficient * np.cos(inputs @ weights)
 
-        activation_values.append(apply_operations_one_output(terms, operations))
+        elif ft == 'pow':
+            if version == 'v2':
+                # Fractional exponents — elementwise per dimension
+                # is_integer shape: (n_inputs,) — broadcasts across all rows
+                # base shape: (n_samples, n_inputs)
+                # powered shape: (n_samples, n_inputs) → sum to (n_samples,)
+                exponents  = np.abs(weights)
+                is_integer = np.floor(exponents) == exponents
+                base       = np.where(is_integer, inputs, np.abs(inputs) + 1e-10)
+                term       = coefficient * np.sum(np.power(base, exponents), axis=1)
 
-    return activation_values
+            elif version == 'v1':
+                exponents = np.clip(np.round(np.abs(weights)), 1, 4).astype(int)
+                term      = coefficient * np.sum(np.power(inputs, exponents), axis=1)
+
+            else:  # v0
+                term = coefficient * np.sum(np.power(inputs, np.abs(weights)), axis=1)
+
+        elif ft == 'none':
+            term = np.zeros(len(inputs))
+
+        else:
+            raise ValueError(f"Unsupported function type: {ft}")
+
+        terms.append(term)
+
+    # apply_operations_one_output works unchanged — *= and sum() both
+    # operate elementwise on numpy arrays automatically
+    result = apply_operations_one_output(terms, operations)
+    return np.array(result).tolist()
 
 
 def solution_to_string(solution, num_inputs, num_functions):
