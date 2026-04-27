@@ -78,7 +78,7 @@ LIGHT_CONFIG = {
     'ga_pop':       80,                                          # vs 200
     'ga_gens':      150,                                         # vs 500
     'torch_epochs': 200,                                         # vs 500
-    'ga_versions':  ['v1'],                                      # add versions as you fix bugs
+    'ga_versions':  ['v1', 'v2'],                                      # add versions as you fix bugs
 }
 
 
@@ -243,11 +243,40 @@ def activation_function_one_output(inputs, solution, num_inputs, num_functions,
                     term = coefficient * np.cos(np.dot(weights, input_record))
               
             elif ft == 'pow':
-                # FIXED B4: integer exponents only — always real, no NaN, no infinity
-                # exponents clipped to {1,2,3,4} — classical polynomial basis
-                exponents = np.clip(np.round(np.abs(weights)), 1, 4).astype(int)
-                term = coefficient * np.sum(np.power(input_record, exponents))
-            
+                if version == 'v2':
+                    # v2 fixes BUG 7 by handling integer and fractional exponents separately (fractional exponents — elementwise per dimension)
+                    exponents = np.abs(weights)
+                    
+                    # For each dimension, choose the base depending on whether
+                    # the exponent is integer or fractional:
+                    #   Integer exponent: use raw x — np.power handles sign correctly
+                    #                     so (-5)^2 = 25 and (-5)^3 = -125 as expected
+                    #   Fractional exponent: use |x|+eps — avoids complex numbers
+                    #                        since (-0.5)^0.7 is undefined in real numbers
+                    # np.where operates elementwise so each dimension is handled
+                    # independently — e.g. exponents [2.0, 0.7, 3.0] correctly uses
+                    # raw x for dims 1 and 3, and |x| only for dim 2
+                    is_integer = np.floor(exponents) == exponents
+                    base = np.where(is_integer, input_record, np.abs(input_record) + 1e-10)
+                    term = coefficient * np.sum(np.power(base, exponents))
+                    
+                    # Equivalent explicit loop (clearer but slower — kept for reference):
+                    # result = np.zeros_like(input_record, dtype=float)
+                    # for j, (x, e) in enumerate(zip(input_record, exponents)):
+                    #     if e == np.floor(e):        # integer exponent
+                    #         result[j] = np.power(x, e)                  # (-5)^2 = 25 correctly
+                    #     else:                        # fractional exponent
+                    #         result[j] = np.power(np.abs(x) + 1e-10, e) # always real
+                    # term = coefficient * np.sum(result)
+                elif version == 'v0':
+                    # BUG 7: using raw input_record for all exponents causes issues
+                    # when weights are negative (fractional exponents become complex)
+                    term = coefficient * np.sum(np.power(input_record, np.abs(weights)))
+                elif version == 'v1':
+                    # v1: integer exponents only, clipped to {1,2,3,4}
+                    exponents = np.clip(np.round(np.abs(weights)), 1, 4).astype(int)
+                    term = coefficient * np.sum(np.power(input_record, exponents))
+
             elif ft == 'none':
                 term = 0.0
                 
@@ -277,8 +306,8 @@ def solution_to_string(solution, num_inputs, num_functions):
             terms.append(f"{c:.3f}*cos({inner})")
         elif ft == 'pow':
             w_arr = np.array(w, dtype=float)
-            exponents = np.clip(np.round(np.abs(w_arr)), 1, 4).astype(int)
-            inner = " + ".join(f"x{i+1}^{e}" for i, e in enumerate(exponents))
+            exponents = np.abs(w_arr)
+            inner = " + ".join(f"x{i+1}^{e:.3f}" for i, e in enumerate(exponents))
             terms.append(f"{c:.3f}*({inner})")
         elif ft == 'none':
             terms.append("0")
@@ -350,6 +379,15 @@ GA_CONFIGS = {
         'coefficient_range':(-1, 1),    # keep coefficients small to avoid fitness explosion (BUG 6)
         'version':          'v1',       # FIXED B1: np.radians removed 
     },
+
+    'v2': {
+    'description': 'v1 + fractional exponents in pow via elementwise integer/fractional handling',
+    'weight_range':     (-10, 10),
+    'function_range':   (2, 5),
+    'operation_range':  (0, 2),
+    'coefficient_range':(-1, 1),
+    'version': 'v2',                    # activates fractional exponents in pow branch
+},
     # --- ADD NEW VERSIONS BELOW AS YOU FIX BUGS ---
     # 'v1': {
     #     'description':      'v0 + fix BUG 1,2,3: correct ranges + remove allow_duplicate_genes',
