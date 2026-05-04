@@ -42,12 +42,14 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+import os 
 import time
 import warnings
 import datetime
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.preprocessing import RobustScaler
 
 try:
     import pygad
@@ -74,16 +76,16 @@ warnings.filterwarnings('ignore')
 # ============================================================================
 
 LIGHT_CONFIG = {
-    'functions':    ['sphere', 'sine_composite', 'rastrigin'],  # 3 of 7
-    'dimensions':   [2, 5],                                      # skip 10D
-    'n_samples':    500,                                         # vs 1000
-    'n_runs':       2,                                           # vs 3
-    'ga_pop':       80,                                          # vs 200
-    'ga_gens':      150,                                         # vs 500
-    'torch_epochs': 200,                                         # vs 500
-    'ga_versions':  ['v1', 'v2'],                                      # add versions as you fix bugs
+    'functions':    ['sphere', 'rosenbrock', 'rastrigin', 'griewank',
+                     'ackley', 'sine_composite', 'fourier_mixture'],
+    'dimensions':   [2, 5, 10],
+    'n_samples':    1000,
+    'n_runs':       5,
+    'ga_pop':       200,
+    'ga_gens':      300,
+    'torch_epochs': 500,
+    'ga_versions':  ['v2'],
 }
-
 
 # ============================================================================
 # SECTION 1: BENCHMARK FUNCTIONS (unchanged from v2)
@@ -607,7 +609,12 @@ def run_comparison(config=None):
             X, y = generate_dataset(fname, ndim, config['n_samples'])
             Xs   = MinMaxScaler(feature_range=(-1, 1)).fit_transform(X)
             # BUG 9: MinMaxScaler is sensitive to outliers (bad for Rosenbrock)
-            ys   = MinMaxScaler().fit_transform(y.reshape(-1, 1)).flatten()
+            # ys   = MinMaxScaler().fit_transform(y.reshape(-1, 1)).flatten()
+            # RobustScaler uses median and IQR — not affected by outliers
+            # Critical for Rosenbrock which has extreme tail values up to 7900
+            ys_raw = RobustScaler().fit_transform(y.reshape(-1, 1)).flatten()
+            # Re-scale to (0,1) after robust scaling for model compatibility
+            ys = MinMaxScaler().fit_transform(ys_raw.reshape(-1, 1)).flatten()
             Xtr, Xte, ytr, yte = train_test_split(Xs, ys, test_size=0.2, random_state=42)
 
             # --- GA versions ---
@@ -711,7 +718,8 @@ if __name__ == '__main__':
     summary = print_report(df)
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
-    out_file = f'results_light_{timestamp}.csv'
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    out_file = os.path.join(script_dir, f'results_light_{timestamp}.csv')
     df.to_csv(out_file, index=False)
     print(f"\nRaw results saved to {out_file}")
 
