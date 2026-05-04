@@ -38,10 +38,13 @@ HOW TO USE:
 =============================================================================
 """
 
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
 import time
 import warnings
+import datetime
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
@@ -707,7 +710,8 @@ if __name__ == '__main__':
     df = run_comparison(LIGHT_CONFIG)
     summary = print_report(df)
 
-    out_file = 'results_light.csv'
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+    out_file = f'results_light_{timestamp}.csv'
     df.to_csv(out_file, index=False)
     print(f"\nRaw results saved to {out_file}")
 
