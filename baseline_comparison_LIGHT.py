@@ -84,7 +84,7 @@ LIGHT_CONFIG = {
     'ga_pop':       200,
     'ga_gens':      300,
     'torch_epochs': 500,
-    'ga_versions':  ['v2'],
+    'ga_versions':  ['v1','v2'],
 }
 
 # ============================================================================
@@ -630,11 +630,14 @@ def run_comparison(config=None):
                         ga_config_name = gv,
                     )
                     run_r2s.append(res['R2'])
+                    
                     all_results.append({
                         'Function': fname, 'Dims': ndim,
                         'Model': f'GA-OBN ({gv})', 'Run': run,
-                        **{k: res[k] for k in ['MSE','MAE','R2','RMSE','train_time','n_params']},
+                        **{k: res[k] for k in ['MSE','MAE','R2','RMSE','train_time','n_params',
+                            'expression', 'best_generation', 'best_fitness']},
                     })
+                    
                     if run == 0:
                         print(f"    Expression: {res['expression']}")
                 print(f"    R2 per run: {[f'{r:.4f}' for r in run_r2s]}  |  avg: {np.mean(run_r2s):.4f}")
@@ -661,6 +664,7 @@ def run_comparison(config=None):
                             'MSE': metrics['MSE'], 'MAE': metrics['MAE'],
                             'R2': metrics['R2'], 'RMSE': metrics['RMSE'],
                             'train_time': ttime, 'n_params': nparams,
+                            'expression': '', 'best_generation': -1, 'best_fitness': float('nan'),
                         })
                     print(f"  {mname:<12} R2 avg: {np.mean(run_r2s):.4f}  params: {nparams}")
 
