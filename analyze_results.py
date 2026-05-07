@@ -222,13 +222,15 @@ labels  = []
 ga_vals, ga_stds   = [], []
 bl_vals, bl_stds   = [], []
 bl_names           = []
+ga_model_names     = []
 
 for fn, dim in combos:
     sub = summary[(summary['Function'] == fn) & (summary['Dims'] == dim)]
     if sub.empty:
         ga_vals.append(0); ga_stds.append(0)
         bl_vals.append(0); bl_stds.append(0)
-        bl_names.append(''); labels.append(f"{fn}\n{dim}D")
+        bl_names.append(''); ga_model_names.append('')
+        labels.append(f"{fn}\n{dim}D")
         continue
 
     ga_sub = sub[sub['Model'].str.contains('GA-OBN')]
@@ -237,7 +239,8 @@ for fn, dim in combos:
     if ga_sub.empty or bl_sub.empty:
         ga_vals.append(0); ga_stds.append(0)
         bl_vals.append(0); bl_stds.append(0)
-        bl_names.append(''); labels.append(f"{fn}\n{dim}D")
+        bl_names.append(''); ga_model_names.append('')
+        labels.append(f"{fn}\n{dim}D")
         continue
 
     best_ga = ga_sub.loc[ga_sub['R2_mean'].idxmax()]
@@ -245,6 +248,7 @@ for fn, dim in combos:
 
     ga_vals.append(best_ga['R2_mean'])
     ga_stds.append(best_ga['R2_std'])
+    ga_model_names.append(best_ga['Model'])
     bl_vals.append(best_bl['R2_mean'])
     bl_stds.append(best_bl['R2_std'])
     bl_names.append(best_bl['Model'])
@@ -265,12 +269,27 @@ ax.set_xticklabels(labels, fontsize=8)
 ax.set_ylabel("R²", fontsize=11)
 ax.legend(fontsize=10, frameon=False)
 ymin = min(min(ga_vals + bl_vals) - 0.1, -0.1)
-ax.set_ylim(ymin, 1.15)
+ax.set_ylim(ymin, 1.35)
+
+# Annotate GA-OBN version name above each green bar
+for i, (val, name) in enumerate(zip(ga_vals, ga_model_names)):
+    if name:
+        short = name.replace('GA-OBN ', '')  # e.g. "(v2)"
+        ax.text(i - w/2, max(val, 0) + 0.06, short,
+                ha='center', va='bottom', fontsize=7,
+                color='#1E8449', fontweight='bold', rotation=45)
+
+# Annotate best baseline model name above each blue bar
+for i, (val, name) in enumerate(zip(bl_vals, bl_names)):
+    if name and val > -0.5:
+        ax.text(i + w/2, max(val, 0) + 0.06, name,
+                ha='center', va='bottom', fontsize=7,
+                color='#2980B9', fontweight='bold', rotation=45)
 
 # Annotate wins
 for i, (gv, bv) in enumerate(zip(ga_vals, bl_vals)):
     if gv >= bv and gv > 0:
-        ax.text(i, max(gv, bv) + 0.04, '★', ha='center',
+        ax.text(i, max(gv, bv) + 0.22, '★', ha='center',
                 fontsize=12, color='#1E8449', fontweight='bold')
 
 ax.text(0.99, 0.97, '★ = GA-OBN wins', transform=ax.transAxes,
